@@ -1,6 +1,12 @@
 package edu.temple.soundgram;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.io.IOException;
 
 import org.json.JSONArray;
@@ -41,7 +47,8 @@ public class MainActivity extends Activity {
 	int TAKE_PICTURE_REQUEST_CODE = 11111111;
 	int RECORD_AUDIO_REQUEST_CODE = 11111112;
 	
-	File photo, audio;
+	//Added file for cache directory
+	File photo, audio, audioCacheDir;
 	
 	LinearLayout ll;
 	
@@ -64,6 +71,13 @@ public class MainActivity extends Activity {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
+		
+		//Create cache directory
+		audioCacheDir = new File(Environment.getExternalStorageDirectory() + "/SoundGramAudioCache");
+		audioCacheDir.mkdir();
+		
+		
+		
 		
 		
 		// Register listener for messages received while app is in foreground
@@ -248,17 +262,83 @@ public class MainActivity extends Activity {
 			
 			@Override
 			public void onClick(View v) {
-				MediaPlayer mPlayer = new MediaPlayer();
-		        try {
-		            mPlayer.setDataSource(soundgramObject.getString("audio_url"));
-		            mPlayer.prepare();
-		            mPlayer.start();
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			}
-		});
+				
+					
+					
+						try {
+							String audioUrl = soundgramObject.getString("audio_url");
+							int nameStart =audioUrl.indexOf("=") + 1;
+							String fileName = audioUrl.substring(nameStart);
+							File cachePath = new File(Environment.getExternalStorageDirectory().getAbsolutePath() + "/SoundGramAudioCache/" + fileName);
+							
+					
+					/* Audio in cache */
+					if (cachePath.exists()) {
+
+						MediaPlayer mPlayer = new MediaPlayer();
+						
+							mPlayer.setDataSource(cachePath.toString());
+							mPlayer.prepare();
+							mPlayer.start();
+						} 
+						}catch (Exception e) {
+							e.printStackTrace();
+						}
+					
+					/* Audio not in cache - create thread */
+					Thread saveToCache = new Thread(){
+						@Override
+						public void run(){
+							String audioUrl;
+							try {
+								audioUrl = soundgramObject.getString("audio_url");
+							
+							int nameStart =audioUrl.indexOf("=") + 1;
+							String fileName = audioUrl.substring(nameStart);
+							String cacheAudio = soundgramObject.getString("audio_url");
 		
+							URL audioURL = new URL(cacheAudio);
+							HttpURLConnection connect = (HttpURLConnection) audioURL.openConnection();
+							connect.setRequestMethod("GET");
+							connect.setDoOutput(true);
+							connect.connect();
+							
+							InputStream input = connect.getInputStream();
+							OutputStream output = new FileOutputStream(Environment.getExternalStorageDirectory() 
+									+ "/SoundGramAudioCache" + "/" + fileName);
+							
+							byte[] loader = new byte[1024];
+							while(input.read(loader)!= -1){
+								output.write(loader);
+							}
+							output.close();
+							input.close();
+
+							MediaPlayer mPlayer = new MediaPlayer();
+							
+								mPlayer.setDataSource(Environment.getExternalStorageDirectory() 
+										+ "/SoundGramAudioCache" + "/" + fileName);
+								mPlayer.prepare();
+								mPlayer.start();
+							
+							
+						} catch (JSONException e) {
+							e.printStackTrace();
+						} catch (MalformedURLException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+					}
+					};
+					
+				saveToCache.start();	
+			}
+			
+		});		
+				
 		soundgramLayout.addView(soundgramImageView);
 		
 		return soundgramLayout;
@@ -269,6 +349,9 @@ public class MainActivity extends Activity {
 		super.onDestroy();
 		unregisterReceiver(refreshReceiver);
 	}
+	
+	
+	
 	
 }
 
